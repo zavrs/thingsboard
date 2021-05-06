@@ -29,7 +29,7 @@ import static org.thingsboard.common.util.DonAsynchron.withCallback;
         type = ComponentType.FILTER,
         name = "script", relationTypes = {"True", "False"},
         configClazz = TbJsFilterNodeConfiguration.class,
-        nodeDescription = "Filter incoming messages using JS script",
+        nodeDescription = "Filter incoming messages using JS script c大胆抄底发v地方的v",
         nodeDetails = "Evaluate incoming Message with configured JS condition. " +
                 "If <b>True</b> - send Message via <b>True</b> chain, otherwise <b>False</b> chain is used." +
                 "Message payload can be accessed via <code>msg</code> property. For example <code>msg.temperature < 10;</code><br/>" +

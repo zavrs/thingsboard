@@ -30,6 +30,9 @@ import java.util.function.BiConsumer;
 public class BatchTbRuleEngineSubmitStrategy extends AbstractTbRuleEngineSubmitStrategy {
 
     private final int batchSize;
+    /**
+     * 切片中被处理成功消息的计数器，消息每处理成功一条计数器加1
+     */
     private final AtomicInteger packIdx = new AtomicInteger(0);
     private final Map<UUID, TbProtoQueueMsg<TransportProtos.ToRuleEngineMsg>> pendingPack = new LinkedHashMap<>();
     private volatile BiConsumer<UUID, TbProtoQueueMsg<TransportProtos.ToRuleEngineMsg>> msgConsumer;
@@ -51,6 +54,10 @@ public class BatchTbRuleEngineSubmitStrategy extends AbstractTbRuleEngineSubmitS
         packIdx.set(0);
     }
 
+    /**
+     * 切片pendingPack中的消息每当被处理成功一条，就删除一条，并将处理成功计数器加1
+     * @param id
+     */
     @Override
     protected void doOnSuccess(UUID id) {
         boolean endOfPendingPack;
@@ -65,9 +72,15 @@ public class BatchTbRuleEngineSubmitStrategy extends AbstractTbRuleEngineSubmitS
     }
 
     private void submitNext() {
+        //ex.100
         int listSize = orderedMsgList.size();
+        //packIdx初始值为0，会在特定时期被重置为0。所以初始的切片开始下标startIdx=0
+        //假设切片大小为50，而切片中被处理成功的消息量packIdx为25，则startIdx此时为100
         int startIdx = Math.min(packIdx.get() * batchSize, listSize);
+        //batchSize=50
         int endIdx = Math.min(startIdx + batchSize, listSize);
+        //从上可得出pendingPack的消息量为endIdx-startIdx
+        //下面代码开始对消息进行分片，将startIdx-》endIdx范围内的消息装载到pendingPack中，pendingPack中存放的就是切好片的消息，且供msgConsumer进行处理
         synchronized (pendingPack) {
             pendingPack.clear();
             for (int i = startIdx; i < endIdx; i++) {
@@ -79,7 +92,9 @@ public class BatchTbRuleEngineSubmitStrategy extends AbstractTbRuleEngineSubmitS
         if (log.isDebugEnabled() && submitSize > 0) {
             log.debug("[{}] submitting [{}] messages to rule engine", queueName, submitSize);
         }
+        //开始处理切片中的消息,此处的本质是：pendingPack.forEach((id, msg)->{})
         pendingPack.forEach(msgConsumer);
+
     }
 
 }

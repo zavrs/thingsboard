@@ -89,6 +89,10 @@ public class TbCoreTransportApiService {
         transportApiTemplate = builder.build();
     }
 
+    /**
+     * 系统启动就绪，就执行init方法，该方法内部启动线程循环poll队列中的request请求消息，处理好的消息返回给对应的队列
+     * @param applicationReadyEvent
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationEvent(ApplicationReadyEvent applicationReadyEvent) {
         log.info("Received application ready event. Starting polling for events.");

@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2020 The Thingsboard Authors
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -45,6 +45,7 @@ public class DefaultTbQueueRequestTemplate<Request extends TbQueueMsg, Response 
     private final TbQueueAdmin queueAdmin;
     private final TbQueueProducer<Request> requestTemplate;
     private final TbQueueConsumer<Response> responseTemplate;
+
     private final ConcurrentMap<UUID, DefaultTbQueueRequestTemplate.ResponseMetaData<Response>> pendingRequests;
     private final boolean internalExecutor;
     private final ExecutorService executor;
@@ -81,6 +82,9 @@ public class DefaultTbQueueRequestTemplate<Request extends TbQueueMsg, Response 
         }
     }
 
+    /**
+     * request请求对应的响应response会被存入一个response的队列，该方法将启动线程从响应队列中
+     */
     @Override
     public void init() {
         queueAdmin.createTopicIfNotExists(responseTemplate.getTopic());
@@ -112,7 +116,7 @@ public class DefaultTbQueueRequestTemplate<Request extends TbQueueMsg, Response 
                         }
                     });
                     responseTemplate.commit();
-                    tickTs = System.currentTimeMillis();
+                    tickTs = System.currentTimeMillis();//00:00:10
                     tickSize = pendingRequests.size();
                     if (nextCleanupMs < tickTs) {
                         //cleanup;
@@ -161,6 +165,12 @@ public class DefaultTbQueueRequestTemplate<Request extends TbQueueMsg, Response 
         this.messagesStats = messagesStats;
     }
 
+    /**
+     * 完成验证设备连接的任务：
+     * 1、将mqtt接收到的消息经过一定处理后发送到request对应的队列中，DefaultTbQueueResponseTemplate循环从该队列中消费request消息并处理生成对应的响应，并将响应存入对应的响应队列。该响应队列的消息又不断的被init方法消费。由此，send方法
+     *    和init方法构成闭环，完成请求的应答。
+     * 2、【DefaultTbQueueResponseTemplate循环从该队列中消费request消息并处理生成对应的响应】：request消息的处理实际上是交给了DefaultTransportApiService的handle方法
+    */
     @Override
     public ListenableFuture<Response> send(Request request) {
         if (tickSize > maxPendingRequests) {
@@ -170,13 +180,23 @@ public class DefaultTbQueueRequestTemplate<Request extends TbQueueMsg, Response 
         request.getHeaders().put(REQUEST_ID_HEADER, uuidToBytes(requestId));
         request.getHeaders().put(RESPONSE_TOPIC_HEADER, stringToBytes(responseTemplate.getTopic()));
         request.getHeaders().put(REQUEST_TIME, longToBytes(System.currentTimeMillis()));
+        /**
+         * future极为重要，他用于存放请求的响应数据，是异步的。并且被封装到了请求对应的响应元数据体中responseMetaData，同时被send方法给返回，而responseMetaData又被存入了pendingRequests中。
+         * init方法在获取到了响应数据后，就会将数据存放future中了。所以init方法中的future和send方法外的future是同一个对象，当init为future设置数据时，send方法外的future的数据也会同时改变，就可供响应数据的再次处理了。
+         */
         SettableFuture<Response> future = SettableFuture.create();
+
+
         ResponseMetaData<Response> responseMetaData = new ResponseMetaData<>(tickTs + maxRequestTimeout, future);
         pendingRequests.putIfAbsent(requestId, responseMetaData);
         log.trace("[{}] Sending request, key [{}], expTime [{}]", requestId, request.getKey(), responseMetaData.expTime);
         if (messagesStats != null) {
             messagesStats.incrementTotal();
         }
+        /*
+        将设备的连接消息发送到InMemoryStorage，requestTemplate就是一个TbQueueProducer对象
+        主题名称：tb_transport.api.requests，响应消息的存放主题：tb_transport.api.responses.localhost
+         */
         requestTemplate.send(TopicPartitionInfo.builder().topic(requestTemplate.getDefaultTopic()).build(), request, new TbQueueCallback() {
             @Override
             public void onSuccess(TbQueueMsgMetadata metadata) {

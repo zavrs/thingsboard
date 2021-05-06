@@ -33,6 +33,10 @@ public class MqttTransportServerInitializer extends ChannelInitializer<SocketCha
         this.context = context;
     }
 
+    /**
+     * 当接收了客户端的connect后，该方法被调用。该方法的作用：注册对该通道中的消息的处理逻辑：消息的编解码、消息的解析
+     * @param ch
+     */
     @Override
     public void initChannel(SocketChannel ch) {
         ChannelPipeline pipeline = ch.pipeline();
@@ -41,9 +45,10 @@ public class MqttTransportServerInitializer extends ChannelInitializer<SocketCha
             sslHandler = context.getSslHandlerProvider().getSslHandler();
             pipeline.addLast(sslHandler);
         }
+        //消息的编解码
         pipeline.addLast("decoder", new MqttDecoder(context.getMaxPayloadSize()));
         pipeline.addLast("encoder", MqttEncoder.INSTANCE);
-
+        //消息的解析:每当设备与mqtt服务端连接后，就会创建一个DeviceSession：该session持有id、设备通信服务质量的qos集合以及ChannelHandlerContext对象。该session被MqttTransportHandler对象持有并贯穿于消息处理的整个流程
         MqttTransportHandler handler = new MqttTransportHandler(context,sslHandler);
 
         pipeline.addLast(handler);

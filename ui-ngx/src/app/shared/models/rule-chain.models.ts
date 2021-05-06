@@ -74,11 +74,11 @@ export const ruleNodeTypeComponentTypes: ComponentType[] =
 export const ruleChainNodeComponent: RuleNodeComponentDescriptor = {
   type: RuleNodeType.RULE_CHAIN,
   name: 'rule chain',
-  clazz: 'tb.internal.RuleChain',
+  clazz: 'tb.internal.RuleChain1',
   configurationDescriptor: {
     nodeDefinition: {
-      description: '',
-      details: 'Forwards incoming messages to specified Rule Chain',
+      description: '我是你大爷！！！！！！',
+      details: 'Forwards incoming messages to specified Rule Chain我是你大爷！！！！！！',
       inEnabled: true,
       outEnabled: false,
       relationTypes: [],

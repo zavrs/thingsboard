@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2020 The Thingsboard Authors
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -118,6 +118,9 @@ public class DefaultTransportService implements TransportService {
     protected ScheduledExecutorService schedulerExecutor;
     protected ExecutorService transportCallbackExecutor;
 
+    /**
+    sessions：用于注册设备的连接会话信息，SessionMetaData中持有设备的详细信息
+     */
     private final ConcurrentMap<UUID, SessionMetaData> sessions = new ConcurrentHashMap<>();
     private final Map<String, RpcRequestMetadata> toServerRpcPendingMap = new ConcurrentHashMap<>();
     //TODO: Implement cleanup of this maps.
@@ -147,7 +150,9 @@ public class DefaultTransportService implements TransportService {
         this.transportApiStats = statsFactory.createMessagesStats(StatsType.TRANSPORT.getName() + ".producer");
         this.schedulerExecutor = Executors.newSingleThreadScheduledExecutor(ThingsBoardThreadFactory.forName("transport-scheduler"));
         this.transportCallbackExecutor = Executors.newWorkStealingPool(20);
+        //每隔30秒报告所有设备连接的状态
         this.schedulerExecutor.scheduleAtFixedRate(this::checkInactivityAndReportActivity, new Random().nextInt((int) sessionReportTimeout), sessionReportTimeout, TimeUnit.MILLISECONDS);
+
         transportApiRequestTemplate = queueProvider.createTransportApiRequestTemplate();
         transportApiRequestTemplate.setMessagesStats(transportApiStats);
         ruleEngineMsgProducer = producerProvider.getRuleEngineMsgProducer();
@@ -227,10 +232,17 @@ public class DefaultTransportService implements TransportService {
         }
     }
 
+    /**
+     * 1、封装设备的连接认证消息
+     * 2、开启异步线程
+     * @param msg
+     * @param callback
+     */
     @Override
     public void process(TransportProtos.ValidateDeviceTokenRequestMsg msg, TransportServiceCallback<TransportProtos.ValidateDeviceCredentialsResponseMsg> callback) {
         log.trace("Processing msg: {}", msg);
         TbProtoQueueMsg<TransportApiRequestMsg> protoMsg = new TbProtoQueueMsg<>(UUID.randomUUID(), TransportApiRequestMsg.newBuilder().setValidateTokenRequestMsg(msg).build());
+        //transportApiRequestTemplate.send(protoMsg)方法返回一个ListenableFuture对象
         AsyncCallbackTemplate.withCallback(transportApiRequestTemplate.send(protoMsg),
                 response -> callback.onSuccess(response.getValue().getValidateTokenResponseMsg()), callback::onError, transportCallbackExecutor);
     }
@@ -412,6 +424,14 @@ public class DefaultTransportService implements TransportService {
         return sessionMetaData;
     }
 
+    /**
+     * 此方法用于检查设备连接是否处于活动状态：
+     * 超时时间：transport.sessions.inactivity_timeout=30000。
+     * 当前时间戳-超时时间>上一次活动时间，session过期：
+     * 1、修改主题中的数据
+     * 2、将过期session从sessions中删除
+     * 3、关闭netty与该设备的连接通道
+     */
     private void checkInactivityAndReportActivity() {
         long expTime = System.currentTimeMillis() - sessionInactivityTimeout;
         sessions.forEach((uuid, sessionMD) -> {
@@ -566,6 +586,7 @@ public class DefaultTransportService implements TransportService {
     }
 
     protected void sendToDeviceActor(TransportProtos.SessionInfoProto sessionInfo, TransportToDeviceActorMsg toDeviceActorMsg, TransportServiceCallback<Void> callback) {
+        //根据设备所属的租户和自身的id，得到设备在tb_core主题中的分区信息
         TopicPartitionInfo tpi = partitionService.resolve(ServiceType.TB_CORE, getTenantId(sessionInfo), getDeviceId(sessionInfo));
         if (log.isTraceEnabled()) {
             log.trace("[{}][{}] Pushing to topic {} message {}", getTenantId(sessionInfo), getDeviceId(sessionInfo), tpi.getFullTopicName(), toDeviceActorMsg);

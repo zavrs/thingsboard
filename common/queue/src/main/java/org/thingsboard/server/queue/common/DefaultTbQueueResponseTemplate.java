@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2020 The Thingsboard Authors
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -74,6 +74,9 @@ public class DefaultTbQueueResponseTemplate<Request extends TbQueueMsg, Response
         this.loopExecutor = Executors.newSingleThreadExecutor();
     }
 
+    // DefaultTransportApiService handler：提供同数据库通信的接口，如数据库的查询。
+    // DefaultTbQueueResponseTemplate.init()方法被TbCoreTransportApiService的监听方法@EventListener(ApplicationReadyEvent.class) onApplicationEvent调用。
+    // TbCoreTransportApiService初始化时就将DefaultTbQueueResponseTemplate类型的成员变量进行赋值
     @Override
     public void init(TbQueueHandler<Request, Response> handler) {
         this.responseTemplate.init();
@@ -97,6 +100,7 @@ public class DefaultTbQueueResponseTemplate<Request extends TbQueueMsg, Response
                     requests.forEach(request -> {
                         long currentTime = System.currentTimeMillis();
                         long requestTime = bytesToLong(request.getHeaders().get(REQUEST_TIME));
+                        //请求超时时间为10s,请求时间加上超时时间大于当前时间则不超时
                         if (requestTime + requestTimeout >= currentTime) {
                             byte[] requestIdHeader = request.getHeaders().get(REQUEST_ID_HEADER);
                             if (requestIdHeader == null) {

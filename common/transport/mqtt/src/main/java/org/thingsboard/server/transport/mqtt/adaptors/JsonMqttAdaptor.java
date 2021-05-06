@@ -57,8 +57,11 @@ public class JsonMqttAdaptor implements MqttTransportAdaptor {
 
     @Override
     public TransportProtos.PostTelemetryMsg convertToPostTelemetry(MqttDeviceAwareSessionContext ctx, MqttPublishMessage inbound) throws AdaptorException {
+        //负载非空校验
         String payload = validatePayload(ctx.getSessionId(), inbound.payload(), false);
         try {
+            //将负载解析为jso对象
+            //将json对象转换为protibuf格式的遥测数据
             return JsonConverter.convertToTelemetryProto(new JsonParser().parse(payload));
         } catch (IllegalStateException | JsonSyntaxException ex) {
             throw new AdaptorException(ex);

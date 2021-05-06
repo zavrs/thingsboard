@@ -15,6 +15,18 @@
  */
 package org.thingsboard.server.queue.discovery;
 
+/**
+ * 对TB平台提供的服务信息进行初始化，并封装成一个ServiceInfo对象，一个服务具有唯一的serviceId，每个服务都默认绑定一个租户，
+ * 能提供多种服务类型【TB_CORE：核心服务, TB_RULE_ENGINE：规则引擎, TB_TRANSPORT：信息传输服务, JS_EXECUTOR：js执行器;】
+ * 如果提供了规则引擎服务且配置了规则引擎的配置，则加载其配置：
+ * 1、规则引擎的消息主题是tb_rule_engine：每隔25毫秒从主题中poll一次消息
+ * 2、主题tb_rule_engine下管理着三个子队列：Main-主队列，HighPriority-高优先级队列，SequentialByOriginator-按发起者排序队列
+ * 3、每个子队列都对应有一个主题：Main-主队列：：tb_rule_engine.main，HighPriority-高优先级队列：：tb_rule_engine.hp，SequentialByOriginator-按发起者排序队列：：tb_rule_engine.sq
+ * 4、每个子队列的主题都有各自的默认分区和消息的提交策略、处理策略
+ *
+ *
+ */
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

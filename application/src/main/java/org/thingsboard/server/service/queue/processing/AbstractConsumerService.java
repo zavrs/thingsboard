@@ -51,7 +51,10 @@ public abstract class AbstractConsumerService<N extends com.google.protobuf.Gene
 
     protected final ActorSystemContext actorContext;
     protected final DataDecodingEncodingService encodingService;
-
+    /**
+     * 对于DefaultTbCoreConsumerService服务，消费tb_core.notifications.localhost中的数据：
+     * 对于DefaultTbRuleEngineConsumerService服务，消费tb_rule_engine.notifications.localhost中的数据：实体生命周期事件的消息：如实体的创建、更新、删除、assigned、unassigned、实体属性更新等事件
+     */
     protected final TbQueueConsumer<TbProtoQueueMsg<N>> nfConsumer;
 
     public AbstractConsumerService(ActorSystemContext actorContext, DataDecodingEncodingService encodingService, TbQueueConsumer<TbProtoQueueMsg<N>> nfConsumer) {
@@ -60,11 +63,21 @@ public abstract class AbstractConsumerService<N extends com.google.protobuf.Gene
         this.nfConsumer = nfConsumer;
     }
 
+    /**
+     *
+     * @param mainConsumerThreadName
+     * @param nfConsumerThreadName
+     */
     public void init(String mainConsumerThreadName, String nfConsumerThreadName) {
+        //ThingsBoardThreadFactory.forName(mainConsumerThreadName):线程工厂，线程池在创建线程时使用该工厂来创建特定需求的线程
         this.consumersExecutor = Executors.newCachedThreadPool(ThingsBoardThreadFactory.forName(mainConsumerThreadName));
         this.notificationsConsumerExecutor = Executors.newSingleThreadExecutor(ThingsBoardThreadFactory.forName(nfConsumerThreadName));
     }
 
+    /**
+     * 容器启动成功，系统初始化完成的事件，系统可以接受请求
+     * @param event
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationEvent(ApplicationReadyEvent event) {
         log.info("Subscribing to notifications: {}", nfConsumer.getTopic());
@@ -75,6 +88,10 @@ public abstract class AbstractConsumerService<N extends com.google.protobuf.Gene
 
     protected abstract ServiceType getServiceType();
 
+    /**
+     * 对于DefaultTbCoreConsumerService，该方法处理tb_core中的数据
+     * 对于DefaultTbRuleEngineConsumerService，该方法处理tb_rule_engine中的数据
+     */
     protected abstract void launchMainConsumers();
 
     protected abstract void stopMainConsumers();
@@ -83,10 +100,17 @@ public abstract class AbstractConsumerService<N extends com.google.protobuf.Gene
 
     protected abstract long getNotificationPackProcessingTimeout();
 
+    /**
+     * 对于DefaultTbCoreConsumerService，该方法处理tb_core.notifications.localhost中的数据
+     * 对于DefaultTbRuleEngineConsumerService，该方法处理tb_rule_engine.notifications.localhost中的数据
+     */
     protected void launchNotificationsConsumer() {
         notificationsConsumerExecutor.submit(() -> {
             while (!stopped) {
                 try {
+                    /*
+                    nfConsumer：InMemoryTbQueueConsumer
+                     */
                     List<TbProtoQueueMsg<N>> msgs = nfConsumer.poll(getNotificationPollDuration());
                     if (msgs.isEmpty()) {
                         continue;

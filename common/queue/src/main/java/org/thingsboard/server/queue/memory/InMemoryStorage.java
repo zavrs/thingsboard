@@ -29,6 +29,11 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
+/**
+ * 内存型的平台数据存储中心。使用ConcurrentHashMap<String, BlockingQueue<TbQueueMsg>> storage作为存储器：
+ * key:String,主题topic的全名，如tb_transport.api.requests，tb_core.94f33ff0-6928-11eb-9dba-b50f9ec294a4.3，tb_transport.api.responses.localhost
+ * value:BlockingQueue<TbQueueMsg>,阻塞队列，存储具体的数据
+ */
 public final class InMemoryStorage {
     private static InMemoryStorage instance;
     private final ConcurrentHashMap<String, BlockingQueue<TbQueueMsg>> storage;

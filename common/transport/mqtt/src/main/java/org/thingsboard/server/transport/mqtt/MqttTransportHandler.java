@@ -81,6 +81,8 @@ import static io.netty.handler.codec.mqtt.MqttQoS.AT_MOST_ONCE;
 import static io.netty.handler.codec.mqtt.MqttQoS.FAILURE;
 
 /**
+ * mqtt 服务端消息处理器：根据客服端的消息报文类型
+ * 每当一个设备连接上来后就有一个handler去处理数据
  * @author Andrew Shvayka
  */
 @Slf4j
@@ -358,12 +360,18 @@ public class MqttTransportHandler extends ChannelInboundHandlerAdapter implement
     }
 
     private void processAuthTokenConnect(ChannelHandlerContext ctx, MqttConnectMessage msg) {
+        /*
+        userName:iot平台生成的token，当不为空时必须进行设备认证
+         */
         String userName = msg.payload().userName();
         log.info("[{}] Processing connect msg for client with user name: {}!", sessionId, userName);
         if (StringUtils.isEmpty(userName)) {
             ctx.writeAndFlush(createMqttConnAckMsg(CONNECTION_REFUSED_BAD_USER_NAME_OR_PASSWORD));
             ctx.close();
         } else {
+            /*
+            transportService.process执行完成后执行 new TransportServiceCallback<ValidateDeviceCredentialsResponseMsg>()回调函数
+             */
             transportService.process(ValidateDeviceTokenRequestMsg.newBuilder().setToken(userName).build(),
                     new TransportServiceCallback<ValidateDeviceCredentialsResponseMsg>() {
                         @Override
@@ -387,6 +395,10 @@ public class MqttTransportHandler extends ChannelInboundHandlerAdapter implement
             String sha3Hash = EncryptionUtil.getSha3Hash(strCert);
             transportService.process(ValidateDeviceX509CertRequestMsg.newBuilder().setHash(sha3Hash).build(),
                     new TransportServiceCallback<ValidateDeviceCredentialsResponseMsg>() {
+                        /**
+                         * 设备连接认证成功并获取到了设备信息后的处理逻辑
+                         * @param msg
+                         */
                         @Override
                         public void onSuccess(ValidateDeviceCredentialsResponseMsg msg) {
                             onValidateDeviceResponse(msg, ctx);
@@ -504,6 +516,16 @@ public class MqttTransportHandler extends ChannelInboundHandlerAdapter implement
         }
     }
 
+    /**
+     * 设备连接认证成功且获取到设备信息后：
+     * 1、将设别信息存入设备连接会话上下文中;
+     * 2、通过设备信息构建设备连接会话sessionInfo;
+     * 3、将设备连接会话sessionInfo推送到[[[[deviceActor]]]]:本质是将info发送到了InMemoryStorage中指定的队列中;
+     * 4、推送成功后将设备session注册到DefaultTransportService的sessions中;
+     * 5、向设备发送ack回执.
+     * @param msg
+     * @param ctx
+     */
     private void onValidateDeviceResponse(ValidateDeviceCredentialsResponseMsg msg, ChannelHandlerContext ctx) {
         if (!msg.hasDeviceInfo()) {
             ctx.writeAndFlush(createMqttConnAckMsg(CONNECTION_REFUSED_NOT_AUTHORIZED));

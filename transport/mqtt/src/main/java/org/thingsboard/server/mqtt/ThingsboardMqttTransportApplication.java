@@ -23,6 +23,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.util.Arrays;
 
+
 @SpringBootConfiguration
 @EnableAsync
 @EnableScheduling
@@ -34,6 +35,7 @@ public class ThingsboardMqttTransportApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(ThingsboardMqttTransportApplication.class, updateArguments(args));
+        System.out.println("我是mqtt的启动类。。。。。。。。。。。");
     }
 
     private static String[] updateArguments(String[] args) {

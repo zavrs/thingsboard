@@ -48,6 +48,15 @@ import javax.annotation.PreDestroy;
 import java.util.*;
 import java.util.concurrent.*;
 
+
+/**
+ * 规则引擎消费服务：
+ * 该服务的功能是消费设备上传的数据，数据经过一定处理后推送到规则引擎RuleEngineActor中
+ * 干两件事情：
+ * 1、消费处理tb_rule_engine.notifications.localhost中的数据，方法是launchNotificationsConsumer
+ * 2、消费处理tb_rule_engine中的数据，方法是launchMainConsumers
+ *
+ */
 @Service
 @TbRuleEngineComponent
 @Slf4j
@@ -94,6 +103,9 @@ public class DefaultTbRuleEngineConsumerService extends AbstractConsumerService<
     @PostConstruct
     public void init() {
         super.init("tb-rule-engine-consumer", "tb-rule-engine-notifications-consumer");
+        /**
+         * 为规则引擎的三种队列main\HighPriority\SequentialByOriginator分别创建对应的消费者
+         */
         for (TbRuleEngineQueueConfiguration configuration : ruleEngineSettings.getQueues()) {
             consumerConfigurations.putIfAbsent(configuration.getName(), configuration);
             consumers.computeIfAbsent(configuration.getName(), queueName -> tbRuleEngineQueueFactory.createToRuleEngineMsgConsumer(configuration));
@@ -113,6 +125,10 @@ public class DefaultTbRuleEngineConsumerService extends AbstractConsumerService<
 
     @Override
     public void onApplicationEvent(PartitionChangeEvent partitionChangeEvent) {
+        /*
+        监听到主题分区信息的改变事件，消费着需要去进行订阅分区
+        如果事件的服务类型为TB_RULE_ENGINE，则订阅队列主题的0-9个分区
+         */
         if (partitionChangeEvent.getServiceType().equals(getServiceType())) {
             ServiceQueue serviceQueue = partitionChangeEvent.getServiceQueueKey().getServiceQueue();
             log.info("[{}] Subscribing to partitions: {}", serviceQueue.getQueue(), partitionChangeEvent.getPartitions());
@@ -136,6 +152,7 @@ public class DefaultTbRuleEngineConsumerService extends AbstractConsumerService<
                 try {
                     List<TbProtoQueueMsg<ToRuleEngineMsg>> msgs = consumer.poll(pollDuration);
                     if (msgs.isEmpty()) {
+                        //System.out.println("----------------------------");
                         continue;
                     }
                     TbRuleEngineSubmitStrategy submitStrategy = submitStrategyFactory.newInstance(configuration.getName(), configuration.getSubmitStrategy());
@@ -144,7 +161,9 @@ public class DefaultTbRuleEngineConsumerService extends AbstractConsumerService<
                     submitStrategy.init(msgs);
 
                     while (!stopped) {
+                        //TbMsgPackProcessingContext对象也持有了msgs的拷贝
                         TbMsgPackProcessingContext ctx = new TbMsgPackProcessingContext(submitStrategy);
+                        //如果submitStrategy是BatchTbRuleEngineSubmitStrategy对象，则开始对切片的数据进行处理
                         submitStrategy.submitAttempt((id, msg) -> submitExecutor.submit(() -> {
                             log.trace("[{}] Creating callback for message: {}", id, msg.getValue());
                             ToRuleEngineMsg toRuleEngineMsg = msg.getValue();
@@ -154,6 +173,7 @@ public class DefaultTbRuleEngineConsumerService extends AbstractConsumerService<
                                     new TbMsgPackCallback(id, tenantId, ctx);
                             try {
                                 if (toRuleEngineMsg.getTbMsg() != null && !toRuleEngineMsg.getTbMsg().isEmpty()) {
+                                    //该方法如果处理成功，将执行callback中的onSuccess方法把处理成功的消息从pendingMap中移到successMap中，对于处理超时、失败的消息也将被存入timeoutMap和failureMap中
                                     forwardToRuleEngineActor(configuration.getName(), tenantId, toRuleEngineMsg, callback);
                                 } else {
                                     callback.onSuccess();
@@ -162,27 +182,36 @@ public class DefaultTbRuleEngineConsumerService extends AbstractConsumerService<
                                 callback.onFailure(new RuleEngineException(e.getMessage()));
                             }
                         }));
-
+                        /*
+                        以上代码执行结束意味着一个切片中的数据被处理了，需要对处理结果做以下校验
+                         */
+                        //主线程调用await方法，使主线程阻塞ProcessingTimeout毫秒，在该段时间内如果当前切片的所有数据处理完成(成功和失败都算处理完成)，则处理不超时。countdown方法将被调用，主线程被唤醒
                         boolean timeout = false;
                         if (!ctx.await(configuration.getPackProcessingTimeout(), TimeUnit.MILLISECONDS)) {
                             timeout = true;
                         }
 
                         TbRuleEngineProcessingResult result = new TbRuleEngineProcessingResult(configuration.getName(), timeout, ctx);
+                        //超时校验
                         if (timeout) {
                             printFirstOrAll(configuration, ctx, ctx.getPendingMap(), "Timeout");
                         }
+                        //是否有数据处理失败校验
                         if (!ctx.getFailedMap().isEmpty()) {
                             printFirstOrAll(configuration, ctx, ctx.getFailedMap(), "Failed");
                         }
+                        //对处理结果给出处理决策
                         TbRuleEngineProcessingDecision decision = ackStrategy.analyze(result);
                         if (statsEnabled) {
                             stats.log(result, decision.isCommit());
                         }
+                        //如果给出的决策是提交：即当前切片的处理结果是成功
                         if (decision.isCommit()) {
                             submitStrategy.stop();
                             break;
                         } else {
+                            //处理策略不是commit，就将ReprocessMap中的消息更新到submitStrategy的orderedMsgList变量中
+                            //如果submitStrategy是batch的，就将packIdx重置，以记录下一个切片被处理成功的消息的下标
                             submitStrategy.update(decision.getReprocessMap());
                         }
                     }
@@ -233,6 +262,13 @@ public class DefaultTbRuleEngineConsumerService extends AbstractConsumerService<
         return packProcessingTimeout;
     }
 
+    /**
+     *
+     * @param id
+     * @param msg
+     * @param callback
+     * @throws Exception
+     */
     @Override
     protected void handleNotification(UUID id, TbProtoQueueMsg<ToRuleEngineNotificationMsg> msg, TbCallback callback) throws Exception {
         ToRuleEngineNotificationMsg nfMsg = msg.getValue();

@@ -70,6 +70,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 干两件事情：
+ * 1、消费处理tb_core.notifications.localhost中的数据，消费者是nfConsumer
+ * 2、消费处理tb_core中的数据
+ */
 @Service
 @TbCoreComponent
 @Slf4j

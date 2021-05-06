@@ -87,6 +87,11 @@ public class HashPartitionService implements PartitionService {
         this.tbQueueRuleEngineSettings = tbQueueRuleEngineSettings;
     }
 
+
+    /**
+     * 初始化四大主题的分区信息
+     * 四大主题：tb_core，tb_rule_engine.main，tb_rule_engine.hp，tb_rule_engine.sq
+     */
     @PostConstruct
     public void init() {
         this.hashFunction = forName(hashFunctionName);
@@ -109,10 +114,13 @@ public class HashPartitionService implements PartitionService {
     }
 
     private TopicPartitionInfo resolve(ServiceQueue serviceQueue, TenantId tenantId, EntityId entityId) {
+        //获取实例的hash值
         int hash = hashFunction.newHasher()
                 .putLong(entityId.getId().getMostSignificantBits())
                 .putLong(entityId.getId().getLeastSignificantBits()).hash().asInt();
+        //获取主题的分区容量
         Integer partitionSize = partitionSizes.get(serviceQueue);
+        //使用实例的hash值同分区容量取余，得到实例的分区号
         int partition;
         if (partitionSize != null) {
             partition = Math.abs(hash % partitionSize);

@@ -33,6 +33,7 @@ import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 
 /**
+ * mqtt服务端
  * @author Andrew Shvayka
  */
 @Service("MqttTransportService")

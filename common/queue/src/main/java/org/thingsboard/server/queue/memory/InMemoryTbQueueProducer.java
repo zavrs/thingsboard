@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * 规则引擎的消息生产者，该生产者通过send方法将DefaultTransportService加工过的消息存入InMemoryStorage中
  */
 package org.thingsboard.server.queue.memory;
 

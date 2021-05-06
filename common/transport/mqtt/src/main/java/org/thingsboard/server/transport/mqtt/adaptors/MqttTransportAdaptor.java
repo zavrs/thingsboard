@@ -34,6 +34,11 @@ import java.util.Optional;
 
 /**
  * @author Andrew Shvayka
+ *
+ * mqtt数据传输适配器：将入站数据按其类型解析成对应类型的数据结构
+ * 1、校验负载是否为空
+ * 2、将解析工作委托给JsonConverter的具体方法
+ *
  */
 public interface MqttTransportAdaptor {
 

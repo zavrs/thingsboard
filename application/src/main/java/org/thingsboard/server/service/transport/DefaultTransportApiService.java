@@ -97,11 +97,22 @@ public class DefaultTransportApiService implements TransportApiService {
 
     private final ConcurrentMap<String, ReentrantLock> deviceCreationLocks = new ConcurrentHashMap<>();
 
+    /**
+     * 获取设备信息的handle方法：
+     * 根据从InMemoryStorage的队列中获取到的request消息的类型，handle方法将其路由到不同的验证接口中：
+     * request的消息类型有：设备的连接认证请求（token或者X509Cert）、设备的创建或者获取请求、获取租户路由请求，其他类型（进行空响应）
+     * @param tbProtoQueueMsg
+     * @return
+     */
     @Override
     public ListenableFuture<TbProtoQueueMsg<TransportApiResponseMsg>> handle(TbProtoQueueMsg<TransportApiRequestMsg> tbProtoQueueMsg) {
         TransportApiRequestMsg transportApiRequestMsg = tbProtoQueueMsg.getValue();
         if (transportApiRequestMsg.hasValidateTokenRequestMsg()) {
             ValidateDeviceTokenRequestMsg msg = transportApiRequestMsg.getValidateTokenRequestMsg();
+            /*
+            Futures.transform(ListenableFuture<I> input, AsyncFunction<? super I, ? extends O> function, Executor executor):
+            input的运行结果交由executor提供线程池的function再次处理后，返回一个ListenableFuture的结果
+             */
             return Futures.transform(validateCredentials(msg.getToken(), DeviceCredentialsType.ACCESS_TOKEN), value -> new TbProtoQueueMsg<>(tbProtoQueueMsg.getKey(), value, tbProtoQueueMsg.getHeaders()), MoreExecutors.directExecutor());
         } else if (transportApiRequestMsg.hasValidateX509CertRequestMsg()) {
             ValidateDeviceX509CertRequestMsg msg = transportApiRequestMsg.getValidateX509CertRequestMsg();
@@ -114,6 +125,13 @@ public class DefaultTransportApiService implements TransportApiService {
         return Futures.transform(getEmptyTransportApiResponseFuture(), value -> new TbProtoQueueMsg<>(tbProtoQueueMsg.getKey(), value, tbProtoQueueMsg.getHeaders()), MoreExecutors.directExecutor());
     }
 
+    /**
+     * 实际设备连接认证的方法：
+     * 根据credentialsId从数据库中获取设备认证信息，如果认证信息存在，则getDeviceInfo()方法根据设备id和认证信息获取设备详细信息
+     * @param credentialsId
+     * @param credentialsType
+     * @return
+     */
     private ListenableFuture<TransportApiResponseMsg> validateCredentials(String credentialsId, DeviceCredentialsType credentialsType) {
         //TODO: Make async and enable caching
         DeviceCredentials credentials = deviceCredentialsService.findDeviceCredentialsByCredentialsId(credentialsId);
@@ -174,6 +192,12 @@ public class DefaultTransportApiService implements TransportApiService {
                         .setIsolatedTbRuleEngine(tenant.isIsolatedTbRuleEngine()).build()).build(), dbCallbackExecutorService);
     }
 
+    /**
+     *
+     * @param deviceId
+     * @param credentials
+     * @return
+     */
     private ListenableFuture<TransportApiResponseMsg> getDeviceInfo(DeviceId deviceId, DeviceCredentials credentials) {
         return Futures.transform(deviceService.findDeviceByIdAsync(TenantId.SYS_TENANT_ID, deviceId), device -> {
             if (device == null) {
