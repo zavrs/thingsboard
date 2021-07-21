@@ -141,6 +141,9 @@ class DeviceActorMessageProcessor extends AbstractContextAwareMsgProcessor {
         boolean sent = rpcSubscriptions.size() > 0;
         Set<UUID> syncSessionSet = new HashSet<>();
         rpcSubscriptions.forEach((key, value) -> {
+            /**
+             * 调用传输层，将rpc请求发送给mqtt服务端，mqtt服务端将rpc命令下发到设备
+             */
             sendToTransport(rpcRequest, key, value.getNodeId());
             if (SessionType.SYNC == value.getType()) {
                 syncSessionSet.add(key);
